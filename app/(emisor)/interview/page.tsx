@@ -33,6 +33,7 @@ interface GeminiSessionResponse {
 
 interface LiveKitTokenResponse {
   token: string;
+  url: string;
   room: string;
 }
 
@@ -193,12 +194,10 @@ export default function InterviewPage() {
 
     setCapsuleId(storedId);
 
-    const lkUrl = process.env.NEXT_PUBLIC_LIVEKIT_URL ?? "";
-    setLivekitUrl(lkUrl);
-
     const init = async () => {
       try {
-        // Fetch LiveKit token
+        // Fetch LiveKit token — the server returns the URL alongside the token
+        // so no NEXT_PUBLIC_ env var is needed on the client.
         const tokenRes = await fetch("/api/livekit/token", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -217,6 +216,7 @@ export default function InterviewPage() {
 
         const tokenData = (await tokenRes.json()) as LiveKitTokenResponse;
         setLivekitToken(tokenData.token);
+        setLivekitUrl(tokenData.url);
 
         // Start Gemini Live session
         const geminiRes = await fetch("/api/gemini/session", {

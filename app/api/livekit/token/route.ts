@@ -80,9 +80,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     const jwt = await token.toJwt();
 
+    // LIVEKIT_URL is server-only (no NEXT_PUBLIC_ prefix).
+    // Returned here so the browser can connect without a public env var.
+    // The URL itself is not secret — only LIVEKIT_API_SECRET is.
+    const livekitUrl = process.env.LIVEKIT_URL ?? "";
+
     return NextResponse.json(
       {
         token: jwt,
+        url: livekitUrl,
         room: roomName,
         identity,
         expires_in: TOKEN_TTL_SECONDS,

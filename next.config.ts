@@ -34,7 +34,7 @@ const nextConfig: NextConfig = {
           // Permissions policy: restrict sensitive APIs
           {
             key: "Permissions-Policy",
-            value: "camera=(), microphone=(self), geolocation=()",
+            value: "camera=(self), microphone=(self), geolocation=()",
           },
           // Content Security Policy
           // - Scripts: self + unpkg for ffmpeg.wasm CDN
