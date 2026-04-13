@@ -12,9 +12,9 @@
  *
  * Body:
  *   {
- *     capsule_id: string
- *     transcript: TranscriptEntry[]
- *     total_duration: number   // seconds
+ *     capsule_id: string          // required
+ *     transcript?: TranscriptEntry[] | string   // optional — loaded from DB if omitted
+ *     total_duration?: number     // optional — defaults to 720 (12 min max)
  *   }
  *
  * Response:
@@ -45,8 +45,8 @@ const TARGET_SEGMENTS = 5; // ask Gemini to find up to this many
 
 interface AnalyzeRequestBody {
   capsule_id: string;
-  transcript: TranscriptEntry[];
-  total_duration: number;
+  transcript?: TranscriptEntry[] | string;
+  total_duration?: number;
 }
 
 interface GeminiAnalysisResult {
@@ -89,9 +89,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    const { capsule_id, transcript, total_duration } = body;
+    const { capsule_id, transcript: bodyTranscript, total_duration: bodyDuration } = body;
 
-    // ── Validate inputs ───────────────────────────────────────
+    // ── Validate capsule_id ───────────────────────────────────
     if (!capsule_id || typeof capsule_id !== "string") {
       return NextResponse.json(
         { error: "A capsule ID is required." },
@@ -99,38 +99,43 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    if (!Array.isArray(transcript) || transcript.length === 0) {
-      return NextResponse.json(
-        {
-          error:
-            "No transcript was provided. Please complete the interview first.",
-        },
-        { status: 400 }
-      );
-    }
-
-    if (
-      typeof total_duration !== "number" ||
-      total_duration <= 0 ||
-      total_duration > 720 // max 12 minutes
-    ) {
-      return NextResponse.json(
-        { error: "Please provide a valid interview duration." },
-        { status: 400 }
-      );
-    }
-
-    // ── Verify capsule exists ─────────────────────────────────
+    // ── Verify capsule exists and load transcript from DB ─────
     const capsule = await getCapsuleById(capsule_id);
     if (!capsule) {
       return NextResponse.json(
-        {
-          error:
-            "We couldn't find this capsule. Please check and try again.",
-        },
+        { error: "We couldn't find this capsule. Please check and try again." },
         { status: 404 }
       );
     }
+
+    // ── Resolve transcript ────────────────────────────────────
+    // Priority: body > DB. Accepts TranscriptEntry[] or plain string.
+    let transcript: TranscriptEntry[];
+
+    if (Array.isArray(bodyTranscript) && bodyTranscript.length > 0) {
+      transcript = bodyTranscript as TranscriptEntry[];
+    } else if (typeof bodyTranscript === "string" && bodyTranscript.trim()) {
+      transcript = plainTextToTranscriptEntries(bodyTranscript);
+    } else if (capsule.transcript && capsule.transcript.trim()) {
+      transcript = plainTextToTranscriptEntries(capsule.transcript);
+    } else {
+      // No transcript available — return a prompt for the sender to write manually
+      return NextResponse.json(
+        {
+          timestamps: [],
+          message_draft: "",
+          duration_selected: 0,
+          emotional_highlights: [],
+        },
+        { status: 200 }
+      );
+    }
+
+    // ── Resolve total_duration ────────────────────────────────
+    const total_duration =
+      typeof bodyDuration === "number" && bodyDuration > 0 && bodyDuration <= 720
+        ? bodyDuration
+        : estimateDuration(transcript);
 
     // ── Call Gemini Pro ───────────────────────────────────────
     const analysis = await analyzeWithGeminiPro(
@@ -176,6 +181,40 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       { status: 500 }
     );
   }
+}
+
+// ============================================================
+// Transcript helpers
+// ============================================================
+
+/**
+ * Convert a plain-text transcript (lines joined with \n) into
+ * TranscriptEntry[] so the rest of the pipeline can handle it uniformly.
+ * Lines starting with "AI:" or "Interviewer:" are tagged as 'ai'; rest as 'user'.
+ */
+function plainTextToTranscriptEntries(text: string): TranscriptEntry[] {
+  const lines = text.split("\n").filter((l) => l.trim());
+  return lines.map((line, i) => {
+    const isAi =
+      /^(AI|Interviewer|Gemini)\s*:/i.test(line) ||
+      /^\[.*\]\s*(AI|Interviewer)\s*:/i.test(line);
+    const cleaned = line.replace(/^(\[.*?\]\s*)?(AI|Interviewer|Gemini|Sender|User)\s*:\s*/i, "").trim();
+    return {
+      speaker: isAi ? "ai" : "user",
+      text: cleaned || line.trim(),
+      timestamp: i * 15, // approximate 15 s per turn when no real timestamps exist
+    } as TranscriptEntry;
+  });
+}
+
+/**
+ * Estimate a total duration from transcript entries when not provided by caller.
+ */
+function estimateDuration(transcript: TranscriptEntry[]): number {
+  if (transcript.length === 0) return 60;
+  const last = transcript[transcript.length - 1];
+  // Add 30 s padding after the last entry
+  return Math.min(last.timestamp + 30, 720);
 }
 
 // ============================================================
