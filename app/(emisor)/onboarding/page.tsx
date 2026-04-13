@@ -92,12 +92,21 @@ export default function OnboardingPage() {
         body: JSON.stringify(body),
       });
 
+      // Defensive parse: Vercel puede devolver HTML en errores de infraestructura
+      const contentType = res.headers.get("content-type") ?? "";
+      const isJson = contentType.includes("application/json");
+
       if (!res.ok) {
-        const data = (await res.json()) as { error?: string };
+        const message = isJson
+          ? ((await res.json()) as { error?: string }).error
+          : undefined;
         throw new Error(
-          data.error ??
-            "Algo salió mal, pero tu intención está a salvo. Inténtalo de nuevo."
+          message ?? "Algo salió mal, pero tu intención está a salvo. Inténtalo de nuevo."
         );
+      }
+
+      if (!isJson) {
+        throw new Error("Algo salió mal, pero tu intención está a salvo. Inténtalo de nuevo.");
       }
 
       const capsule = (await res.json()) as { id: string };

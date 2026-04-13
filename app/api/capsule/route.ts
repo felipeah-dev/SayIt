@@ -12,6 +12,9 @@ import {
   type DeliveryType,
 } from "@/lib/db/supabase";
 
+// Force dynamic rendering — this route reads env vars and DB at runtime
+export const dynamic = "force-dynamic";
+
 // ============================================================
 // POST /api/capsule
 // Creates a new capsule record.
