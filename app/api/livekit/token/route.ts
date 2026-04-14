@@ -85,6 +85,20 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     // The URL itself is not secret — only LIVEKIT_API_SECRET is.
     const livekitUrl = process.env.LIVEKIT_URL ?? "";
 
+    if (!livekitUrl || !livekitUrl.startsWith("wss://")) {
+      console.error(
+        "[POST /api/livekit/token] LIVEKIT_URL is missing or not in wss:// format. Got:",
+        livekitUrl || "(empty)"
+      );
+      return NextResponse.json(
+        {
+          error:
+            "The interview room isn't configured correctly. Please contact support.",
+        },
+        { status: 503 }
+      );
+    }
+
     return NextResponse.json(
       {
         token: jwt,

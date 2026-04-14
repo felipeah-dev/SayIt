@@ -51,7 +51,7 @@ const nextConfig: NextConfig = {
               "font-src 'self' https://fonts.gstatic.com",
               "img-src 'self' data: blob:",
               "media-src 'self' blob:",
-              "connect-src 'self' https://*.supabase.co wss://*.livekit.cloud https://*.r2.cloudflarestorage.com https://generativelanguage.googleapis.com",
+              "connect-src 'self' https://*.supabase.co wss://*.livekit.cloud https://*.livekit.cloud https://cloud.livekit.io https://*.r2.cloudflarestorage.com https://generativelanguage.googleapis.com",
               "worker-src 'self' blob:",
               "frame-ancestors 'none'",
             ].join("; "),

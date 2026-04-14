@@ -221,6 +221,12 @@ function estimateDuration(transcript: TranscriptEntry[]): number {
 // Gemini Pro analysis
 // ============================================================
 
+const ANALYZE_MODEL_CASCADE = [
+  "gemini-2.5-flash",      // best quality, 20 req/day free tier
+  "gemini-2.0-flash",      // 1,500 req/day free tier
+  "gemini-2.0-flash-lite", // lightest, highest quota free tier
+];
+
 async function analyzeWithGeminiPro(
   apiKey: string,
   transcript: TranscriptEntry[],
@@ -228,24 +234,31 @@ async function analyzeWithGeminiPro(
   recipientName: string
 ): Promise<GeminiAnalysisResult> {
   const genAI = new GoogleGenerativeAI(apiKey);
-
-  // Use the most capable available model
-  const model = genAI.getGenerativeModel({
-    model: "gemini-1.5-pro",
-  });
-
   const transcriptText = formatTranscriptForAnalysis(transcript);
+  const prompt = buildAnalysisPrompt(transcriptText, totalDuration, recipientName);
 
-  const prompt = buildAnalysisPrompt(
-    transcriptText,
-    totalDuration,
-    recipientName
-  );
+  for (let i = 0; i < ANALYZE_MODEL_CASCADE.length; i++) {
+    const modelName = ANALYZE_MODEL_CASCADE[i];
+    try {
+      if (i > 0) {
+        console.warn(`[analyzeWithGeminiPro] Falling back to ${modelName}`);
+      }
+      const model = genAI.getGenerativeModel({ model: modelName });
+      const result = await model.generateContent(prompt);
+      return parseGeminiAnalysisResponse(result.response.text(), totalDuration);
+    } catch (err) {
+      const isRetryable =
+        err instanceof Error &&
+        (err.message.includes("429") ||
+          err.message.includes("503") ||
+          err.message.includes("quota") ||
+          err.message.includes("demand"));
+      if (isRetryable && i < ANALYZE_MODEL_CASCADE.length - 1) continue;
+      throw err;
+    }
+  }
 
-  const result = await model.generateContent(prompt);
-  const responseText = result.response.text();
-
-  return parseGeminiAnalysisResponse(responseText, totalDuration);
+  throw new Error("All models exhausted");
 }
 
 function formatTranscriptForAnalysis(transcript: TranscriptEntry[]): string {

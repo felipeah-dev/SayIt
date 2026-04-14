@@ -313,7 +313,8 @@ export default function EditorPage() {
           ) : (
             <div className="bg-white/50 rounded-card p-8 flex flex-col items-center justify-center gap-4 min-h-[200px]">
               <p className="font-sans text-sm text-texto-muted text-center">
-                El video estará disponible una vez que la cápsula sea sellada.
+                No pudimos preparar la vista previa del video.
+                Tu mensaje escrito sigue aquí — puedes continuar.
               </p>
             </div>
           )}
